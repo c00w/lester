@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 )
 
 func call(w http.ResponseWriter, r *http.Request) {
@@ -30,5 +31,13 @@ func main() {
 	http.HandleFunc("/call", call)
 	http.HandleFunc("/sms", twilio)
 	http.HandleFunc("/", handle)
-	http.ListenAndServe(":2000", nil)
+	go http.ListenAndServe(":2000", nil)
+
+	r := Reader{[]string{"/home/colin/signal-cli/signal-cli-0.5.6/bin/signal-cli", "-u", "+12065391615"}, make(chan Message), sync.Mutex{}}
+	go r.read()
+	for v := range r.incoming {
+		log.Printf("%v %q", v, v.Body)
+		v.Destination = v.Source
+		r.SendMessage(v)
+	}
 }
