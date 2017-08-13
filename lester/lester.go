@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sync"
+	"os"
+	"os/signal"
+
+	"github.com/c00w/lester"
 )
 
 func call(w http.ResponseWriter, r *http.Request) {
@@ -33,11 +36,20 @@ func main() {
 	http.HandleFunc("/", handle)
 	go http.ListenAndServe(":2000", nil)
 
-	r := Reader{[]string{"/home/colin/signal-cli/signal-cli-0.5.6/bin/signal-cli", "-u", "+12065391615"}, make(chan Message), sync.Mutex{}}
-	go r.read()
-	for v := range r.incoming {
-		log.Printf("%v %q", v, v.Body)
-		v.Destination = v.Source
-		r.SendMessage(v)
+	r := lester.NewReader("/home/colin/signal-cli/signal-cli-0.5.6/bin/signal-cli", "-u", "+12065391615")
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt)
+	for {
+		select {
+		case s := <-c:
+			log.Printf("Received %v", s)
+			r.Stop()
+			return
+		case v := <-r.Incoming:
+			log.Printf("%v %q", v, v.Body)
+			v.Destination = v.Source
+			r.SendMessage(v)
+		}
 	}
 }

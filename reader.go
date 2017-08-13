@@ -1,4 +1,4 @@
-package main
+package lester
 
 import (
 	"bytes"
@@ -10,40 +10,71 @@ import (
 	"time"
 )
 
+type CommandRunner interface {
+	Run(command ...string) ([]byte, error)
+}
+
+type wrapexec struct{}
+
+func (w wrapexec) Run(command ...string) ([]byte, error) {
+	return exec.Command(command[0], command[1:]...).CombinedOutput()
+}
+
 type Message struct {
 	Destination string
 	Body        string
 	Source      string
 }
 
+type rawDataMessage struct {
+	Timestamp int64
+	Message   string
+}
+type rawEnvelope struct {
+	Source       string
+	SourceDevice int
+	Timestamp    int64
+	IsReceipt    bool
+	DataMessage  *rawDataMessage
+}
 type rawMessage struct {
-	Envelope struct {
-		Source       string
-		SourceDevice int
-		Timestamp    int64
-		IsReceipt    bool
-		DataMessage  *struct {
-			Timestamp int64
-			Message   string
-		}
-	}
+	Envelope rawEnvelope
 }
 
 type Reader struct {
 	command  []string
-	incoming chan Message
+	Incoming chan Message
+	runner   CommandRunner
 	l        sync.Mutex
+	exit     bool
+}
+
+func NewReader(command ...string) *Reader {
+	r := &Reader{
+		command:  command,
+		Incoming: make(chan Message),
+		runner:   wrapexec{},
+		l:        sync.Mutex{},
+	}
+	go r.read()
+	return r
+}
+
+func (r *Reader) Stop() {
+	r.l.Lock()
+	r.exit = true
+	r.l.Unlock()
 }
 
 func (r *Reader) run(a ...string) ([]byte, error) {
 	log.Printf("running %v", a)
-	log.Printf("done %v", a)
+	defer log.Printf("done %v", a)
 	r.l.Lock()
 	defer r.l.Unlock()
 	t := make([]string, 0)
-	t = append(t, r.command[1:]...)
+	t = append(t, r.command...)
 	t = append(t, a...)
-	return exec.Command(r.command[0], t...).CombinedOutput()
+	return r.runner.Run(t...)
 }
 
 func (r *Reader) SendMessage(m Message) error {
@@ -57,6 +88,14 @@ func (r *Reader) SendMessage(m Message) error {
 
 func (r *Reader) read() {
 	for {
+
+		r.l.Lock()
+		if r.exit {
+			log.Print("exiting")
+			r.l.Unlock()
+			return
+		}
+		r.l.Unlock()
 		log.Print("trying receive")
 		b, err := r.run("receive", "--json", "--ignore-attachments", "-t", "1")
 		if err != nil {
@@ -73,9 +112,10 @@ func (r *Reader) read() {
 			m := &rawMessage{}
 			if err := d.Decode(m); err != nil {
 				log.Printf("Error decoding message: %v", err)
+				break
 			}
 			if m.Envelope.DataMessage != nil {
-				r.incoming <- Message{Source: m.Envelope.Source, Body: m.Envelope.DataMessage.Message}
+				r.Incoming <- Message{Source: m.Envelope.Source, Body: m.Envelope.DataMessage.Message}
 			}
 		}
 	}
