@@ -34,7 +34,7 @@ func TestEcho(t *testing.T) {
 	} {
 		m := &mockworld{send: tc.in}
 		c := clockwork.NewFakeClock()
-		h := newHandler(m, c)
+		h := newHandler(m, c, EchoBrain{m})
 		defer h.Close()
 		c.BlockUntil(1)
 		c.Advance(1)

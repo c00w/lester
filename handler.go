@@ -13,19 +13,25 @@ type Worlder interface {
 	ReadMessage() (Message, error)
 }
 
+type Brains interface {
+	CanHandle(m Message) float64
+	Handle(m Message)
+}
+
 type Handler struct {
-	quit chan struct{}
-	w    Worlder
-	wg   sync.WaitGroup
-	cw   clockwork.Clock
+	quit   chan struct{}
+	w      Worlder
+	wg     sync.WaitGroup
+	cw     clockwork.Clock
+	brains []Brains
 }
 
-func NewHandler(w Worlder) *Handler {
-	return newHandler(w, clockwork.NewRealClock())
+func NewHandler(w Worlder, b ...Brains) *Handler {
+	return newHandler(w, clockwork.NewRealClock(), b...)
 }
 
-func newHandler(w Worlder, cw clockwork.Clock) *Handler {
-	h := &Handler{quit: make(chan struct{}), w: w, cw: cw}
+func newHandler(w Worlder, cw clockwork.Clock, b ...Brains) *Handler {
+	h := &Handler{quit: make(chan struct{}), w: w, cw: cw, brains: b}
 	go h.handle()
 	h.wg.Add(1)
 	return h
@@ -58,7 +64,14 @@ func (h *Handler) handle() {
 			continue
 		}
 		log.Printf("%v %q", v, v.Body)
-		v.Destination, v.Source = v.Source, v.Destination
-		h.w.SendMessage(v)
+		m := 0.0
+		mb := h.brains[0]
+		for _, b := range h.brains {
+			if n := b.CanHandle(v); n > m {
+				m = n
+				mb = b
+			}
+		}
+		mb.Handle(v)
 	}
 }
