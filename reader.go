@@ -93,7 +93,7 @@ func (r *Reader) ReadMessage() (Message, error) {
 		log.Print("trying receive")
 		b, err := r.run("receive", "--json", "--ignore-attachments", "-t", "1")
 		if err != nil {
-			return Message{}, fmt.Errorf("error receiving messages", err)
+			return Message{}, fmt.Errorf("error receiving messages: %v", err)
 		}
 		log.Print("received")
 		if len(b) == 0 {
