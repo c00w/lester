@@ -3,11 +3,15 @@ package lester
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
 	"sync"
-	"time"
+)
+
+var (
+	NoMessage = errors.New("No message Received")
 )
 
 type CommandRunner interface {
@@ -46,7 +50,7 @@ type Reader struct {
 	Incoming chan Message
 	runner   CommandRunner
 	l        sync.Mutex
-	exit     bool
+	buf      []*Message
 }
 
 func NewReader(command ...string) *Reader {
@@ -54,16 +58,8 @@ func NewReader(command ...string) *Reader {
 		command:  command,
 		Incoming: make(chan Message),
 		runner:   wrapexec{},
-		l:        sync.Mutex{},
 	}
-	go r.read()
 	return r
-}
-
-func (r *Reader) Stop() {
-	r.l.Lock()
-	r.exit = true
-	r.l.Unlock()
 }
 
 func (r *Reader) run(a ...string) ([]byte, error) {
@@ -86,36 +82,30 @@ func (r *Reader) SendMessage(m Message) error {
 	return nil
 }
 
-func (r *Reader) read() {
+func (r *Reader) ReadMessage() (Message, error) {
 	for {
+		if len(r.buf) > 0 {
+			t := r.buf[0]
+			r.buf = r.buf[1:]
+			return *t, nil
 
-		r.l.Lock()
-		if r.exit {
-			log.Print("exiting")
-			r.l.Unlock()
-			return
 		}
-		r.l.Unlock()
 		log.Print("trying receive")
 		b, err := r.run("receive", "--json", "--ignore-attachments", "-t", "1")
 		if err != nil {
-			log.Printf("error receiving message: %v", err)
-			continue
+			return Message{}, fmt.Errorf("error receiving messages", err)
 		}
 		log.Print("received")
 		if len(b) == 0 {
-			log.Print("no message sleeping")
-			time.Sleep(10 * time.Second)
-			return
+			return Message{}, NoMessage
 		}
 		for d := json.NewDecoder(bytes.NewBuffer(b)); d.More(); {
 			m := &rawMessage{}
 			if err := d.Decode(m); err != nil {
-				log.Printf("Error decoding message: %v", err)
-				break
+				return Message{}, fmt.Errorf("error decoding message: %v", err)
 			}
 			if m.Envelope.DataMessage != nil {
-				r.Incoming <- Message{Source: m.Envelope.Source, Body: m.Envelope.DataMessage.Message}
+				r.buf = append(r.buf, &Message{Source: m.Envelope.Source, Body: m.Envelope.DataMessage.Message})
 			}
 		}
 	}

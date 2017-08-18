@@ -9,25 +9,16 @@ import (
 
 type testexec struct {
 	in  []string
-	out chan []byte
+	out []byte
 	err error
 }
 
 func (t *testexec) Run(command ...string) ([]byte, error) {
 	t.in = command
-	return <-t.out, nil
+	return t.out, nil
 }
 
 func TestNormalOperation(t *testing.T) {
-	m := &testexec{out: make(chan []byte)}
-	r := &Reader{
-		command:  []string{"command"},
-		Incoming: make(chan Message),
-		runner:   m,
-		l:        sync.Mutex{},
-	}
-	go r.read()
-	defer r.Stop()
 	b, err := json.Marshal(rawMessage{
 		Envelope: rawEnvelope{
 			DataMessage: &rawDataMessage{
@@ -38,15 +29,21 @@ func TestNormalOperation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error marshaling testmessage %v", err)
 	}
-	m.out <- b
+	m := &testexec{out: b}
+	r := &Reader{
+		command:  []string{"command"},
+		Incoming: make(chan Message),
+		runner:   m,
+		l:        sync.Mutex{},
+	}
 
-	select {
-	case i := <-r.Incoming:
-		if i.Body != "foo" {
-			t.Errorf("Incorrect body want foo got %s", i.Body)
-		}
-	case <-time.After(1 * time.Second):
-		t.Fatalf("No Message Received")
+	i, err := r.ReadMessage()
+	if err != nil {
+		t.Fatalf("Error reading message: %v", err)
+		time.Sleep(10)
+	}
+	if i.Body != "foo" {
+		t.Errorf("Incorrect body want foo got %s", i.Body)
 	}
 
 }

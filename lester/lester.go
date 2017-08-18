@@ -37,19 +37,15 @@ func main() {
 	go http.ListenAndServe(":2000", nil)
 
 	r := lester.NewReader("/home/colin/signal-cli/signal-cli-0.5.6/bin/signal-cli", "-u", "+12065391615")
+	h := lester.NewHandler(r)
+	defer h.Close()
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt)
-	for {
-		select {
-		case s := <-c:
-			log.Printf("Received %v", s)
-			r.Stop()
-			return
-		case v := <-r.Incoming:
-			log.Printf("%v %q", v, v.Body)
-			v.Destination = v.Source
-			r.SendMessage(v)
-		}
+
+	select {
+	case s := <-c:
+		log.Printf("Received %v", s)
+		return
 	}
 }
