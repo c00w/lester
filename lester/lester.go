@@ -37,7 +37,12 @@ func main() {
 	go http.ListenAndServe(":2000", nil)
 
 	r := lester.NewReader("/home/colin/signal-cli/signal-cli-0.5.6/bin/signal-cli", "-u", "+12065391615")
-	h := lester.NewHandler(r, lester.EchoBrain{r})
+
+	b, err := lester.NewBoltMemory("boltmemory.db")
+	if err != nil {
+		log.Fatalf("Error opening bolt db: %v", err)
+	}
+	h := lester.NewHandler(r, lester.EchoBrain{W: r}, lester.FinanceBrain{W: r, M: b})
 	defer h.Close()
 
 	c := make(chan os.Signal)
