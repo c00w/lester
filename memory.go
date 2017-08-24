@@ -2,6 +2,7 @@ package lester
 
 import (
 	"log"
+	"strings"
 
 	"github.com/boltdb/bolt"
 )
@@ -36,5 +37,25 @@ func (b *BoltMemory) SetValue(key string, value string) {
 	}); err != nil {
 		log.Fatal(err)
 	}
+}
 
+type BoltPair struct {
+	Key   string
+	Value string
+}
+
+func (b *BoltMemory) GetPrefix(prefix string) []BoltPair {
+	out := make([]BoltPair, 0)
+	if err := b.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("default"))
+		return b.ForEach(func(k, v []byte) error {
+			if strings.HasPrefix(string(k), prefix) {
+				out = append(out, BoltPair{string(k), string(v)})
+			}
+			return nil
+		})
+	}); err != nil {
+		log.Fatal(err)
+	}
+	return out
 }
