@@ -1,6 +1,7 @@
 package lester
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -63,10 +64,11 @@ func (h *Handler) handle() {
 			log.Printf("Error trying to read message: %v", err)
 			continue
 		}
-		log.Printf("%v %q", v, v.Body)
 		m := 0.0
 		mb := h.brains[0]
 		for _, b := range h.brains {
+			n := b.CanHandle(v)
+			fmt.Print(b, v, n)
 			if n := b.CanHandle(v); n > m {
 				m = n
 				mb = b

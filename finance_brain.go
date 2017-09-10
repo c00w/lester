@@ -87,10 +87,9 @@ func (e FinanceBrain) handleList(m Message) {
 			}
 		}
 	}
-	mess := "Here are all your accounts"
+	mess := "Here are all your accounts:"
 	for a, b := range balance {
-		mess += fmt.Sprintf("account %s has balanve %d", a, b)
-
+		mess += fmt.Sprintf(" account %s has balance %d", a, b)
 	}
 	out := Message{Destination: m.Source, Source: m.Destination}
 	out.Body = mess
@@ -140,6 +139,7 @@ func findAccount(in string) string {
 		"vanguard",
 		"schwab",
 		"simple",
+		"hsa",
 	} {
 		if strings.Contains(strings.ToLower(in), s) {
 			return s
