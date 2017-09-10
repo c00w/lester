@@ -38,7 +38,7 @@ func main() {
 
 	r := lester.NewReader("/home/colin/signal-cli/signal-cli-0.5.6/bin/signal-cli", "-u", "+12065391615")
 
-	b, err := lester.NewBoltMemory("boltmemory.db")
+	b, err := lester.NewBoltMemory("/home/colin/boltmemory.db")
 	if err != nil {
 		log.Fatalf("Error opening bolt db: %v", err)
 	}

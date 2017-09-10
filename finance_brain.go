@@ -21,6 +21,11 @@ func IsBalance(m Message) bool {
 	return strings.Contains(m.Body, "balance")
 }
 
+func IsListBalance(m Message) bool {
+	return strings.Contains(m.Body, "balance") &&
+		strings.Contains(m.Body, "account")
+}
+
 func IsRich(m Message) bool {
 	return strings.Contains(m.Body, "rich")
 }
