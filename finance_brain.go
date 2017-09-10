@@ -22,8 +22,7 @@ func IsBalance(m Message) bool {
 }
 
 func IsListBalance(m Message) bool {
-	return strings.Contains(m.Body, "balance") &&
-		strings.Contains(m.Body, "account")
+	return strings.Contains(m.Body, "accounts")
 }
 
 func IsRich(m Message) bool {
@@ -31,6 +30,9 @@ func IsRich(m Message) bool {
 }
 
 func (e FinanceBrain) CanHandle(m Message) float64 {
+	if IsListBalance(m) {
+		return 1
+	}
 	if IsBalance(m) {
 		return 1
 	}
@@ -41,6 +43,10 @@ func (e FinanceBrain) CanHandle(m Message) float64 {
 }
 
 func (e FinanceBrain) Handle(m Message) {
+	if IsListBalance(m) {
+		e.handleList(m)
+		return
+	}
 	if IsBalance(m) {
 		e.handleBalance(m)
 	}
@@ -56,6 +62,39 @@ func badInterest(initial, deposit, years int64) int64 {
 		i += float64(deposit)
 	}
 	return int64(i)
+}
+
+func (e FinanceBrain) handleList(m Message) {
+	d := map[string]map[time.Time]int64{}
+	for _, e := range e.M.GetPrefix("finance-account") {
+		t := strings.Split(e.Key, "-")
+		account := t[2]
+		t2, _ := strconv.ParseInt(t[4], 10, 64)
+		stamp := time.Unix(0, t2)
+		balance, _ := strconv.ParseInt(e.Value, 10, 64)
+		if d[account] == nil {
+			d[account] = map[time.Time]int64{}
+		}
+		d[account][stamp] = balance
+	}
+	latest := map[string]time.Time{}
+	balance := map[string]int64{}
+	for a, m := range d {
+		for t, b := range m {
+			if t.After(latest[a]) {
+				latest[a] = t
+				balance[a] = b
+			}
+		}
+	}
+	mess := "Here are all your accounts"
+	for a, b := range balance {
+		mess += fmt.Sprintf("account %s has balanve %d", a, b)
+
+	}
+	out := Message{Destination: m.Source, Source: m.Destination}
+	out.Body = mess
+	e.W.SendMessage(out)
 }
 
 func (e FinanceBrain) handleRich(m Message) {
