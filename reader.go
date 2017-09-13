@@ -28,6 +28,7 @@ type Message struct {
 	Destination string
 	Body        string
 	Source      string
+	Attachments []string
 }
 
 type rawDataMessage struct {
@@ -74,7 +75,13 @@ func (r *Reader) run(a ...string) ([]byte, error) {
 }
 
 func (r *Reader) SendMessage(m Message) error {
-	b, err := r.run("send", m.Destination, "-m", m.Body)
+	a := []string{"send", m.Destination, "-m", m.Body}
+	if len(m.Attachments) > 0 {
+		for _, m := range m.Attachments {
+			a = append(a, "-a", m)
+		}
+	}
+	b, err := r.run(a...)
 	log.Printf("out %v", string(b))
 	if err != nil {
 		return fmt.Errorf("error sending message: %v", err)

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/jonboulle/clockwork"
+	"gopkg.in/d4l3k/messagediff.v1"
 )
 
 type mockworld struct {
@@ -40,8 +41,8 @@ func TestEcho(t *testing.T) {
 		c.Advance(1)
 		c.BlockUntil(1)
 
-		if m.recv != tc.out {
-			t.Fatalf("Incorrect message, expected %#v, got %#v", tc.out, m.recv)
+		if diff, equal := messagediff.PrettyDiff(m.recv, tc.out); !equal {
+			t.Fatalf("Incorrect message, diff %s", diff)
 		}
 	}
 }
