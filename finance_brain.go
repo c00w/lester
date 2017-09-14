@@ -2,21 +2,15 @@ package lester
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
-	"image"
-	"image/color"
-	"image/draw"
-	"image/png"
+	"io"
 	"io/ioutil"
 	"log"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
-	"golang.org/x/image/math/fixed"
 
 	chart "github.com/wcharczuk/go-chart"
 )
@@ -122,7 +116,7 @@ func (e FinanceBrain) handleList(m Message) {
 	e.W.SendMessage(out)
 }
 
-func (e FinanceBrain) handleRich(m Message) {
+func (e FinanceBrain) buildAccounts() map[string]map[time.Time]int64 {
 	d := map[string]map[time.Time]int64{}
 	for _, e := range e.M.GetPrefix("finance-account") {
 		t := strings.Split(e.Key, "-")
@@ -135,6 +129,11 @@ func (e FinanceBrain) handleRich(m Message) {
 		}
 		d[account][stamp] = balance
 	}
+	return d
+}
+
+func (e FinanceBrain) totalBalance() int64 {
+	d := e.buildAccounts()
 	latest := map[string]time.Time{}
 	balance := map[string]int64{}
 	for a, m := range d {
@@ -150,6 +149,11 @@ func (e FinanceBrain) handleRich(m Message) {
 	for _, b := range balance {
 		total += b
 	}
+	return total
+}
+
+func (e FinanceBrain) handleRich(m Message) {
+	total := e.totalBalance()
 
 	out := Message{Destination: m.Source, Source: m.Destination}
 	out.Body = fmt.Sprintf("You are worth %d$, at 100k/year you'll be worth %d$, 115k %d, 130k %d$",
@@ -201,22 +205,6 @@ func (e FinanceBrain) handleBalance(m Message) {
 	e.M.SetValue(fmt.Sprintf("finance-account-%s-time-%d-balance", account, time.Now().UnixNano()), fmt.Sprint(balance))
 	out.Body = fmt.Sprintf("Thanks for the info, updated account %s to balance %d", account, balance)
 	e.W.SendMessage(out)
-}
-
-func (e FinanceBrain) buildAccounts() map[string]map[time.Time]int64 {
-	d := map[string]map[time.Time]int64{}
-	for _, e := range e.M.GetPrefix("finance-account") {
-		t := strings.Split(e.Key, "-")
-		account := t[2]
-		t2, _ := strconv.ParseInt(t[4], 10, 64)
-		stamp := time.Unix(0, t2)
-		balance, _ := strconv.ParseInt(e.Value, 10, 64)
-		if d[account] == nil {
-			d[account] = map[time.Time]int64{}
-		}
-		d[account][stamp] = balance
-	}
-	return d
 }
 
 type sortT struct {
@@ -277,48 +265,26 @@ func (e FinanceBrain) handleReport(m Message) {
 	b := &bytes.Buffer{}
 	graph.Render(chart.PNG, b)
 
-	i, err := png.Decode(b)
-	if err != nil {
-		log.Fatalf("unable to open png file: %v", err)
-	}
+	total := e.totalBalance()
 
-	oi := image.NewRGBA(image.Rect(
-		i.Bounds().Min.X,
-		i.Bounds().Min.Y,
-		i.Bounds().Max.X,
-		i.Bounds().Max.Y+200,
-	))
-	draw.Draw(oi, image.Rect(
-		oi.Bounds().Min.X,
-		oi.Bounds().Min.Y,
-		oi.Bounds().Max.X,
-		oi.Bounds().Max.Y,
-	), image.NewUniform(color.RGBA{255, 255, 255, 255}), image.Point{}, draw.Src)
-	draw.Draw(oi, image.Rect(
-		i.Bounds().Min.X,
-		i.Bounds().Min.Y+200,
-		i.Bounds().Max.X,
-		i.Bounds().Max.Y+200,
-	), i, image.Point{}, draw.Src)
-
-	col := color.RGBA{0, 0, 0, 255}
-	point := fixed.P(20, 50)
-	dr := &font.Drawer{
-		Dst:  oi,
-		Src:  image.NewUniform(col),
-		Face: basicfont.Face7x13,
-		Dot:  point,
-	}
-	dr.DrawString("Colin's Financial Report")
-	dr.Dot = fixed.P(20, 70)
-	dr.DrawString(fmt.Sprintf("Produced on %s", time.Now().Format("Mon Jan 2 2006")))
+	p := "<!doctype html><html><body>"
+	p += "<header><h3>Colin's Financial Report</h3></header>"
+	p += fmt.Sprintf("<img src=\"data:image/gif;base64,%s\" style=\"max-width: 80%%;\" />",
+		base64.StdEncoding.EncodeToString(b.Bytes()))
+	p += fmt.Sprintf("<p>Colin currently has %d$. In 5 years Colin will be worth %d$ if he saves %d$/year, %d$ if %d$/year, %d$ if %d$/year given a 5% maket return rate</p>", total,
+		badInterest(total, 100000, 5), 100000,
+		badInterest(total, 115000, 5), 115000,
+		badInterest(total, 130000, 5), 130000)
+	p += "</body></html>"
 
 	tf, err := ioutil.TempFile("", "report")
 	if err != nil {
 		log.Fatalf("Error opening temp file: %v", err)
 	}
 
-	png.Encode(tf, oi)
+	if _, err = io.WriteString(tf, p); err != nil {
+		log.Fatalf("Error writing html: %v", err)
+	}
 	out := Message{Destination: m.Source, Source: m.Destination}
 	out.Body = fmt.Sprintf("Built a report")
 	out.Attachments = []string{tf.Name()}
