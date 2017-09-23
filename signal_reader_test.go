@@ -10,7 +10,6 @@ import (
 type testexec struct {
 	in  []string
 	out []byte
-	err error
 }
 
 func (t *testexec) Run(command ...string) ([]byte, error) {
@@ -31,10 +30,9 @@ func TestNormalOperation(t *testing.T) {
 	}
 	m := &testexec{out: b}
 	r := &SignalReader{
-		command:  []string{"command"},
-		Incoming: make(chan Message),
-		runner:   m,
-		l:        sync.Mutex{},
+		command: []string{"command"},
+		runner:  m,
+		l:       sync.Mutex{},
 	}
 
 	i, err := r.ReadMessage()

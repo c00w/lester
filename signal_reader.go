@@ -54,18 +54,16 @@ type rawMessage struct {
 }
 
 type SignalReader struct {
-	command  []string
-	Incoming chan Message
-	runner   CommandRunner
-	l        sync.Mutex
-	buf      []*Message
+	command []string
+	runner  CommandRunner
+	l       sync.Mutex
+	buf     []*Message
 }
 
 func NewSignalReader(command ...string) *SignalReader {
 	r := &SignalReader{
-		command:  command,
-		Incoming: make(chan Message),
-		runner:   wrapexec{},
+		command: command,
+		runner:  wrapexec{},
 	}
 	return r
 }

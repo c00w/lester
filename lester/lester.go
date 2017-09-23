@@ -36,7 +36,7 @@ func main() {
 	http.HandleFunc("/", handle)
 	go http.ListenAndServe(":2000", nil)
 
-	r := lester.NewSignalReader("/home/colin/signal-cli/signal-cli-0.5.6/bin/signal-cli", "-u", "+12065391615")
+	r := &lester.KeybaseReader{}
 
 	b, err := lester.NewBoltMemory("/home/colin/boltmemory.db")
 	if err != nil {
