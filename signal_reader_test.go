@@ -30,7 +30,7 @@ func TestNormalOperation(t *testing.T) {
 		t.Fatalf("error marshaling testmessage %v", err)
 	}
 	m := &testexec{out: b}
-	r := &Reader{
+	r := &SignalReader{
 		command:  []string{"command"},
 		Incoming: make(chan Message),
 		runner:   m,

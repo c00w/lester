@@ -31,9 +31,16 @@ type Message struct {
 	Attachments []string
 }
 
+type Attachment struct {
+	ID          uint64
+	Size        uint64
+	ContentType string
+}
+
 type rawDataMessage struct {
-	Timestamp int64
-	Message   string
+	Timestamp   int64
+	Message     string
+	Attachments []Attachment
 }
 type rawEnvelope struct {
 	Source       string
@@ -46,7 +53,7 @@ type rawMessage struct {
 	Envelope rawEnvelope
 }
 
-type Reader struct {
+type SignalReader struct {
 	command  []string
 	Incoming chan Message
 	runner   CommandRunner
@@ -54,8 +61,8 @@ type Reader struct {
 	buf      []*Message
 }
 
-func NewReader(command ...string) *Reader {
-	r := &Reader{
+func NewSignalReader(command ...string) *SignalReader {
+	r := &SignalReader{
 		command:  command,
 		Incoming: make(chan Message),
 		runner:   wrapexec{},
@@ -63,7 +70,7 @@ func NewReader(command ...string) *Reader {
 	return r
 }
 
-func (r *Reader) run(a ...string) ([]byte, error) {
+func (r *SignalReader) run(a ...string) ([]byte, error) {
 	log.Printf("running %v", a)
 	defer log.Printf("done %v", a)
 	r.l.Lock()
@@ -74,7 +81,7 @@ func (r *Reader) run(a ...string) ([]byte, error) {
 	return r.runner.Run(t...)
 }
 
-func (r *Reader) SendMessage(m Message) error {
+func (r *SignalReader) SendMessage(m Message) error {
 	a := []string{"send", m.Destination, "-m", m.Body}
 	if len(m.Attachments) > 0 {
 		for _, m := range m.Attachments {
@@ -89,7 +96,7 @@ func (r *Reader) SendMessage(m Message) error {
 	return nil
 }
 
-func (r *Reader) ReadMessage() (Message, error) {
+func (r *SignalReader) ReadMessage() (Message, error) {
 	for {
 		if len(r.buf) > 0 {
 			t := r.buf[0]
@@ -98,7 +105,7 @@ func (r *Reader) ReadMessage() (Message, error) {
 
 		}
 		log.Print("trying receive")
-		b, err := r.run("receive", "--json", "--ignore-attachments", "-t", "1")
+		b, err := r.run("receive", "--json", "-t", "1")
 		if err != nil {
 			return Message{}, fmt.Errorf("error receiving messages: %v", err)
 		}
@@ -111,8 +118,13 @@ func (r *Reader) ReadMessage() (Message, error) {
 			if err := d.Decode(m); err != nil {
 				return Message{}, fmt.Errorf("error decoding message: %v", err)
 			}
+			log.Printf("%s", string(b))
 			if m.Envelope.DataMessage != nil {
 				r.buf = append(r.buf, &Message{Source: m.Envelope.Source, Body: m.Envelope.DataMessage.Message})
+				for _, m := range m.Envelope.DataMessage.Attachments {
+					fn := fmt.Sprintf("/home/colin/.config/signal/attachments/%d", m.ID)
+					r.buf[len(r.buf)-1].Attachments = append(r.buf[len(r.buf)-1].Attachments, fn)
+				}
 			}
 		}
 	}

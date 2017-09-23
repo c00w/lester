@@ -3,10 +3,12 @@ package lester
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,6 +43,10 @@ func IsReport(m Message) bool {
 	return strings.Contains(m.Body, "report")
 }
 
+func IsCSV(m Message) bool {
+	return strings.Contains(m.Body, "csv") && len(m.Attachments) == 1
+}
+
 func (e FinanceBrain) CanHandle(m Message) float64 {
 	if IsListBalance(m) {
 		return 1
@@ -53,6 +59,10 @@ func (e FinanceBrain) CanHandle(m Message) float64 {
 	}
 	if IsReport(m) {
 		return 1
+	}
+	if IsCSV(m) {
+		return 1
+
 	}
 	return 0
 }
@@ -73,6 +83,81 @@ func (e FinanceBrain) Handle(m Message) {
 	if IsReport(m) {
 		e.handleReport(m)
 	}
+	if IsCSV(m) {
+		e.handleCSV(m)
+	}
+}
+
+type rawEntry struct {
+	account string
+	data    time.Time
+	delta   int64
+}
+
+func (e FinanceBrain) handleCSV(m Message) {
+	f, err := os.Open(m.Attachments[0])
+	if err != nil {
+		log.Fatalf("Error opening file %s: %v", m.Attachments[0], err)
+	}
+
+	firstblock := false
+	seeksecond := false
+	secondblock := false
+	r := csv.NewReader(f)
+	r.FieldsPerRecord = -1
+	for {
+		col, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatalf("error reading row %s", err)
+		}
+
+		if !firstblock {
+			if len(col) == 0 || col[0] != "Account Number" {
+				continue
+			}
+			firstblock = true
+			continue
+		}
+
+		if firstblock && !seeksecond {
+			if len(col) <= 8 {
+				seeksecond = true
+				continue
+			}
+			t, err := time.Parse("01/02/2006", col[2])
+			if err != nil {
+				log.Fatalf("Error parsing date: %v", err)
+			}
+			bal, err := strconv.ParseFloat(col[8], 64)
+			if err != nil {
+				log.Fatalf("Error parsing balance: %v", err)
+			}
+			log.Print(rawEntry{col[5], t, int64(bal)})
+
+		}
+		if seeksecond && !secondblock {
+			if len(col) == 0 || col[0] != "Account Number" {
+				continue
+			}
+			secondblock = true
+			continue
+		}
+		if secondblock {
+			t, err := time.Parse("01/02/2006", col[1])
+			if err != nil {
+				log.Fatalf("Error parsing date: %v", err)
+			}
+			bal, err := strconv.ParseFloat(col[8], 64)
+			if err != nil {
+				log.Fatalf("Error parsing balance: %v", err)
+			}
+			log.Print(rawEntry{col[5], t, int64(bal)})
+		}
+	}
+
 }
 
 func badInterest(initial, deposit, years int64) int64 {
@@ -267,11 +352,19 @@ func (e FinanceBrain) handleReport(m Message) {
 
 	total := e.totalBalance()
 
+	// TODO clr
+	// - Coverpage (Name,Title, Picture or something)
+	// - Calculate savings (namely ratio of savings to not).
+	// - What rent vs fun budget.
+	// - Better graphs (aka can see all the lines).
+	// - walk through my overview process basically
+	// - holepunch
+
 	p := "<!doctype html><html><body>"
 	p += "<header><h3>Colin's Financial Report</h3></header>"
 	p += fmt.Sprintf("<img src=\"data:image/gif;base64,%s\" style=\"max-width: 80%%;\" />",
 		base64.StdEncoding.EncodeToString(b.Bytes()))
-	p += fmt.Sprintf("<p>Colin currently has %d$. In 5 years Colin will be worth %d$ if he saves %d$/year, %d$ if %d$/year, %d$ if %d$/year given a 5% maket return rate</p>", total,
+	p += fmt.Sprintf("<p>Colin currently has %d$. In 5 years Colin will be worth %d$ if he saves %d$/year, %d$ if %d$/year, %d$ if %d$/year given a 5%% maket return rate</p>", total,
 		badInterest(total, 100000, 5), 100000,
 		badInterest(total, 115000, 5), 115000,
 		badInterest(total, 130000, 5), 130000)
