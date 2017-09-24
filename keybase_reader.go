@@ -1,20 +1,19 @@
 package lester
 
 import (
-	"bytes"
 	"encoding/json"
 	"log"
-	"os/exec"
 )
 
 type KeybaseReader struct {
 	store []Message
+	run   CommandRunner
 }
 
 type kMessage struct {
 	Body string `json:"body"`
 }
-type kcommand struct {
+type kCommand struct {
 	Method string `json:"method"`
 	Params struct {
 		Options struct {
@@ -28,38 +27,26 @@ type kcommand struct {
 }
 
 type kresponse struct {
-	Result kresult
+	Result struct {
+		Messages []struct {
+			Msg struct {
+				Content struct {
+					Type string
+					Text struct {
+						Body string
+					}
+				}
+			}
+		}
+	}
 }
 
-type ktext struct {
-	Body string
-}
-
-type kcontent struct {
-	Type string
-	Text ktext
-}
-
-type kmsg struct {
-	Content kcontent
-}
-
-type kmessage struct {
-	Msg kmsg
-}
-
-type kresult struct {
-	Messages []kmessage
-}
-
-func (k *KeybaseReader) run(input []byte) ([]byte, error) {
-	c := exec.Command("keybase", "chat", "api")
-	c.Stdin = bytes.NewBuffer(input)
-	return c.CombinedOutput()
+func NewKeybaseReader() *KeybaseReader {
+	return &KeybaseReader{nil, wrapexec{}}
 }
 
 func (k *KeybaseReader) SendMessage(m Message) error {
-	com := kcommand{Method: "send"}
+	com := kCommand{Method: "send"}
 	com.Params.Options.Channel.Name = "lesterbot,c00w"
 	com.Params.Options.Message = &kMessage{Body: m.Body}
 	b, err := json.Marshal(com)
@@ -67,7 +54,7 @@ func (k *KeybaseReader) SendMessage(m Message) error {
 		return err
 	}
 	log.Printf("running %s", string(b))
-	o, err := k.run(b)
+	o, err := k.run.Run(b)
 	if err != nil {
 		return err
 	}
@@ -82,7 +69,7 @@ func (k *KeybaseReader) ReadMessage() (Message, error) {
 		k.store = k.store[1:]
 		return out, nil
 	}
-	read := kcommand{Method: "read"}
+	read := kCommand{Method: "read"}
 	read.Params.Options.Unread_only = true
 	read.Params.Options.Channel.Name = "lesterbot,c00w"
 	b, err := json.Marshal(read)
@@ -90,7 +77,7 @@ func (k *KeybaseReader) ReadMessage() (Message, error) {
 		return Message{}, err
 	}
 	log.Printf("running %s", string(b))
-	o, err := k.run(b)
+	o, err := k.run.Run(b)
 	if err != nil {
 		return Message{}, err
 	}
