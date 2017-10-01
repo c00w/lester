@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -160,11 +161,12 @@ func (e FinanceBrain) handleCSV(m Message) {
 
 }
 
-func badInterest(initial, deposit, years int64) int64 {
+func Interest(initial, deposit int64, end time.Time) int64 {
+	endd := int64(end.Sub(time.Now()) / (30 * 24 * time.Hour))
 	i := float64(initial)
-	for d := int64(0); d < years; d++ {
-		i *= 1.05
-		i += float64(deposit)
+	for d := int64(0); d < endd; d++ {
+		i *= math.Exp(0.05 * 1.0 / 12)
+		i += float64(deposit) / 12
 	}
 	return int64(i)
 }
@@ -240,12 +242,13 @@ func (e FinanceBrain) totalBalance() int64 {
 func (e FinanceBrain) handleRich(m Message) {
 	total := e.totalBalance()
 
+	bday, _ := time.Parse("2006/01/02", "2022/02/21")
 	out := Message{Destination: m.Source, Source: m.Destination}
-	out.Body = fmt.Sprintf("You are worth %d$, at 100k/year you'll be worth %d$, 115k %d, 130k %d$",
+	out.Body = fmt.Sprintf("You are worth %d$, on your 30th birthday at 100k/year you'll be worth %d$, 115k %d, 130k %d$",
 		total,
-		badInterest(total, 100000, 5),
-		badInterest(total, 115000, 5),
-		badInterest(total, 130000, 5))
+		Interest(total, 100000, bday),
+		Interest(total, 115000, bday),
+		Interest(total, 130000, bday))
 	e.W.SendMessage(out)
 }
 
@@ -310,8 +313,7 @@ func (s sortT) Swap(i, j int) {
 	s.b[i], s.b[j] = s.b[j], s.b[i]
 }
 
-func (e FinanceBrain) handleReport(m Message) {
-
+func (e FinanceBrain) buildGraph() *bytes.Buffer {
 	d := e.buildAccounts()
 	n := time.Now()
 
@@ -349,9 +351,14 @@ func (e FinanceBrain) handleReport(m Message) {
 	}
 	b := &bytes.Buffer{}
 	graph.Render(chart.PNG, b)
+	return b
+}
+
+func (e FinanceBrain) handleReport(m Message) {
 
 	total := e.totalBalance()
 
+	b := e.buildGraph()
 	// TODO clr
 	// - Coverpage (Name,Title, Picture or something)
 	// - Calculate savings (namely ratio of savings to not).
@@ -360,14 +367,17 @@ func (e FinanceBrain) handleReport(m Message) {
 	// - walk through my overview process basically
 	// - holepunch
 
+	bday, _ := time.Parse("2006/01/02", "2022/02/21")
+
 	p := "<!doctype html><html><body>"
 	p += "<header><h3>Colin's Financial Report</h3></header>"
 	p += fmt.Sprintf("<img src=\"data:image/gif;base64,%s\" style=\"max-width: 80%%;\" />",
 		base64.StdEncoding.EncodeToString(b.Bytes()))
-	p += fmt.Sprintf("<p>Colin currently has %d$. In 5 years Colin will be worth %d$ if he saves %d$/year, %d$ if %d$/year, %d$ if %d$/year given a 5%% maket return rate</p>", total,
-		badInterest(total, 100000, 5), 100000,
-		badInterest(total, 115000, 5), 115000,
-		badInterest(total, 130000, 5), 130000)
+	p += fmt.Sprintf("<p>Colin currently has %d$. On his 30th birthday Colin will be worth %d$ if he saves %d$/year, %d$ if %d$/year, %d$ if %d$/year given a 5%% maket return rate</p>", total,
+		Interest(total, 100000, bday), 100000,
+		Interest(total, 115000, bday), 115000,
+		Interest(total, 130000, bday), 130000)
+
 	p += "</body></html>"
 
 	tf, err := ioutil.TempFile("", "report")
