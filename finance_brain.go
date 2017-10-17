@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/csv"
 	"fmt"
+	"html/template"
 	"io"
 	"io/ioutil"
 	"log"
@@ -352,6 +353,15 @@ func (e FinanceBrain) buildGraph() *bytes.Buffer {
 	b := &bytes.Buffer{}
 	graph.Render(chart.PNG, b)
 	return b
+}
+
+func (e FinanceBrain) builTemplate() {
+	_, _ = template.New("report").Parse(`
+	<!doctype html><html><body>
+	<header><h3>Colin's Financial Report</h3></header>
+	<img src="data:image/gif;base64,{{.Graph}}" style=\"max-width: 80%%;\" />
+	<p>Colin currently has {{.Balance}}$. On his 30th birthday Colin will be worth {{.One}}$ if he saves 100k$/year, {{.OneFifteen}}$ if 115k$/year, {{.OneThirty}}$ if 130k$/year given a 5% maket return rate. After he achieves 1 Million dollars, he'll be gaining 50k / year from market returns.</p>
+	`)
 }
 
 func (e FinanceBrain) handleReport(m Message) {
